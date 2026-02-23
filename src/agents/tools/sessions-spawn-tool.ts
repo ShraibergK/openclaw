@@ -1,5 +1,9 @@
 import { Type } from "@sinclair/typebox";
+import { loadConfig } from "../../config/config.js";
 import type { GatewayMessageChannel } from "../../utils/message-channel.js";
+import { DEFAULT_PROVIDER } from "../defaults.js";
+import { loadModelCatalog } from "../model-catalog.js";
+import { parseModelRef, modelKey, buildAllowedModelSet } from "../model-selection.js";
 import { optionalStringEnum } from "../schema/typebox.js";
 import { SUBAGENT_SPAWN_MODES, spawnSubagentDirect } from "../subagent-spawn.js";
 import type { AnyAgentTool } from "./common.js";
@@ -60,6 +64,35 @@ export function createSessionsSpawnTool(opts?: {
           ? Math.max(0, Math.floor(timeoutSecondsCandidate))
           : undefined;
       const thread = params.thread === true;
+
+      // Validate model override if provided (PR #21088)
+      if (modelOverride) {
+        const cfg = loadConfig();
+        const catalog = await loadModelCatalog();
+        const allowed = buildAllowedModelSet({
+          cfg,
+          catalog,
+          defaultProvider: DEFAULT_PROVIDER,
+        });
+
+        if (!allowed.allowAny) {
+          const parsed = parseModelRef(modelOverride, DEFAULT_PROVIDER);
+          if (parsed) {
+            const key = modelKey(parsed.provider, parsed.model);
+            if (!allowed.allowedKeys.has(key)) {
+              return jsonResult({
+                status: "error",
+                error: `model not allowed: ${key}. Allowed models: ${Array.from(allowed.allowedKeys).join(", ")}`,
+              });
+            }
+          } else {
+            return jsonResult({
+              status: "error",
+              error: `invalid model ref: ${modelOverride}`,
+            });
+          }
+        }
+      }
 
       const result = await spawnSubagentDirect(
         {

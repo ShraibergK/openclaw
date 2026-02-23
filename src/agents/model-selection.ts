@@ -188,7 +188,9 @@ export function buildConfiguredAllowlistKeys(params: {
   cfg: OpenClawConfig | undefined;
   defaultProvider: string;
 }): Set<string> | null {
-  const rawAllowlist = Object.keys(params.cfg?.agents?.defaults?.models ?? {});
+  const rawModels = Object.keys(params.cfg?.agents?.defaults?.models ?? {});
+  const rawLocalModels = Object.keys(params.cfg?.agents?.defaults?.localModels ?? {});
+  const rawAllowlist = [...rawModels, ...rawLocalModels];
   if (rawAllowlist.length === 0) {
     return null;
   }
@@ -210,8 +212,12 @@ export function buildModelAliasIndex(params: {
   const byAlias = new Map<string, { alias: string; ref: ModelRef }>();
   const byKey = new Map<string, string[]>();
 
+  // Combine both cloud models and local models
   const rawModels = params.cfg.agents?.defaults?.models ?? {};
-  for (const [keyRaw, entryRaw] of Object.entries(rawModels)) {
+  const localModels = params.cfg.agents?.defaults?.localModels ?? {};
+  const allModels = { ...rawModels, ...localModels };
+
+  for (const [keyRaw, entryRaw] of Object.entries(allModels)) {
     const parsed = parseModelRef(String(keyRaw ?? ""), params.defaultProvider);
     if (!parsed) {
       continue;
@@ -374,7 +380,8 @@ export function buildAllowedModelSet(params: {
 } {
   const rawAllowlist = (() => {
     const modelMap = params.cfg.agents?.defaults?.models ?? {};
-    return Object.keys(modelMap);
+    const localModelMap = params.cfg.agents?.defaults?.localModels ?? {};
+    return [...Object.keys(modelMap), ...Object.keys(localModelMap)];
   })();
   const allowAny = rawAllowlist.length === 0;
   const defaultModel = params.defaultModel?.trim();
